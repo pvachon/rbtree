@@ -1,0 +1,6 @@
+*.o
+test_case_*
+*.pdf
+*.dot
+rbtree_basic_test
+*.sw*
