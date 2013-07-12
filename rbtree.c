@@ -583,8 +583,7 @@ void rb_tree_dump_node(const char *label, struct rb_tree_node *node)
  * \brief Remove the specified key from the rb_tree
  * Removes a specified key from the rb_tree and returns a pointer to the node.
  * \param tree The tree we want to remove the node from
- * \param key The key for the node we want to find and remove
- * \param removed The node we just removed
+ * \param node The the node we want to remove
  * \return RB_OK on success, an error code otherwise
  */
 rb_result_t rb_tree_remove(struct rb_tree *tree,
