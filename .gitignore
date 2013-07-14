@@ -4,3 +4,5 @@ test_case_*
 *.dot
 rbtree_basic_test
 *.sw*
+Documentation
+.DS_Store

@@ -85,9 +85,12 @@ void test_rbtree_print(struct rb_tree_node *node)
     printf("%d", (int)val);
 }
 
+/**
+ * Sample item that one might store in a red-black tree.
+ */
 struct test_rbtree_node {
-    struct rb_tree_node node;
-    int test;
+    struct rb_tree_node node;   /** Red-black tree node data */
+    int test;                   /** Some satellite data for a node */
 };
 
 #define COLOR_BLACK         0x0
@@ -170,7 +173,7 @@ int test_rbtree_lifecycle(size_t num_nodes)
     struct rb_tree my_tree;
 
     TEST_ASSERT_EQUALS(rb_tree_new(&my_tree, test_rbtree_compare), RB_OK);
-    TEST_ASSERT_EQUALS(rb_tree_destroy(&my_tree, NULL), RB_OK);
+    TEST_ASSERT_EQUALS(rb_tree_destroy(&my_tree), RB_OK);
 
     TEST_ASSERT_EQUALS(rb_tree_new(&my_tree, test_rbtree_compare), RB_OK);
 
@@ -178,8 +181,8 @@ int test_rbtree_lifecycle(size_t num_nodes)
     TEST_ASSERT_NOT_EQUALS(nodes, NULL);
 
     for (size_t i = 0; i < num_nodes; ++i) {
-        nodes[i].node.key = (void*)( ((int64_t)i) +  ((i % 2) ? 42 : -42));
-        TEST_ASSERT_EQUALS(rb_tree_insert(&my_tree, &(nodes[i].node)), RB_OK);
+        void *key = (void*)( ((int64_t)i) +  ((i % 2) ? 42 : -42));
+        TEST_ASSERT_EQUALS(rb_tree_insert(&my_tree, key, &(nodes[i].node)), RB_OK);
         if (rbtree_assert(nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after pseudo-random creation at node %zu.\n", i);

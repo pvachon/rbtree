@@ -26,41 +26,122 @@
   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/** \file rbtree.c
+ * An implementation of an intrusive red-black self-balancing tree, that can
+ * be used to implement red-black trees in situations where memory allocation
+ * is not an option.
+ *
+ * The goal of this implementation is to be both easy to use, but also
+ * sufficiently powerful enough to perform all the operations that one might
+ * typically want to do with a red-black tree.
+ *
+ * To make a structure usable with an rb_tree, you must embed the structure
+ * struct rb_tree_node. 
+ * \code
+    struct my_sample_struct {
+        const char *name;
+        int data;
+        struct rb_tree_node rnode;
+    };
+ * \endcode
+ * \note `rb_tree_node` need not be initialized -- it is initialized during the
+ *       insertion operation.
+ *
+ * Next, you must declare a comparison function that, given a pointer to two
+ * keys, returns a value less than 0 if the left-hand side is less than the
+ * right-hand side, 0 if the left-hand side is equal to the right-hand side,
+ * or greater than 0 if the left-hand side is greater than the left-hand side.
+ *
+ * A simple example for a string might use the `strcmp(3)` function directly,
+ * as such:
+ *
+ * \code
+    int my_sample_struct_compare_keys(void *lhs, void *rhs)
+    {
+        return strcmp((const char *)lhs, (const char *)rhs);
+    }
+ * \endcode
+ * \note the function you create for your comparison function must conform to
+ *       rb_cmp_func_t, or the compiler will generate a warning and, if you're
+ *       unlucky, you will fail catastrophically at a later date.
+ *
+ * Then, to create a new, empty red-black tree, call rb_tree_new, as so:
+ * \code
+    struct rb_tree my_rb_tree;
+    if (rb_tree_new(&my_rb_tree, my_sample_struct_compare_keys) != RB_OK) {
+        exit(EXIT_FAILURE);
+    }
+ * \endcode
+ *
+ * Items can be added to the red-black tree using the function `rb_tree_insert`:
+ * \code
+    struct my_sample_struct node = { .name = "test1", .date = 42 };
+    if (rb_tree_insert(&my_rb_tree, node.name, &(node.rnode)) != RB_OK) {
+        printf("Failed to insert a node into the RB tree!\n");
+        exit(EXIT_FAILURE);
+    }
+ * \endcode
+ *
+ * \see rbtree.h
+ * \see rb_tree
+ * \see rb_tree_node
+ */
+
 #include <rbtree.h>
 
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 
-#include <stdio.h>
+/** \defgroup rb_tree_colors Colors for the red-black tree nodes
+ * @{
+ */
 
-
+/**
+ * Node is black
+ */
 #define COLOR_BLACK         0x0
-#define COLOR_RED           0x1
 
+/**
+ * Node is red
+ */
+#define COLOR_RED           0x1
+/**@}*/
+
+/** \defgroup rb_tree_compiler_prims Compiler Primitives 
+ * Primitives used to abstract compiler-specific syntax for common details used in
+ * providing hints to the compiler for optimization or linker details.
+ * @{
+ */
+
+/**
+ * The tagged branch is unlikely to be taken
+ */
 #define RB_UNLIKELY(x) __builtin_expect(!!(x), 0)
+
+/**
+ * The tagged branch is likely to be taken
+ */
 #define RB_LIKELY(x)   __builtin_expect(!!(x), 1)
 
+/**
+ * Indicate that the tagged item can legally be unused in the compilation unit and
+ * that the compiler should not generate a warning
+ */
 #define RB_UNUSED      __attribute__((unused))
+/**@}*/
 
-/* Macro to check if a given assertion about an argument is true */
+/**
+ * Macro to check if a given assertion about an argument is true
+ */
 #define RB_ASSERT_ARG(x) \
     do {                                \
         if (RB_UNLIKELY(!(x))) {        \
-            assert((x));                \
+            assert(#x && 0);            \
             return RB_BAD_ARG;          \
         }                               \
     } while (0)
 
-/**
- * \brief Allocate and construct a new RB-tree
- * Given a pointer to recieve the new RB-tree, allocate the required memory to
- * store the RB-tree metadata (from the heap) and return an initialized, empty
- * RB-tree.
- * \param tree Reference to a pointer to receive the new tree.
- * \param compare Function to be used to compare if a key is less than another key.
- * \return RB_OK on success, an error code otherwise
- */
 rb_result_t rb_tree_new(struct rb_tree *tree,
                         rb_cmp_func_t compare)
 {
@@ -75,39 +156,17 @@ rb_result_t rb_tree_new(struct rb_tree *tree,
     return result;
 }
 
-/**
- * \brief Destroy an RB-tree
- * Given a reference to a pointer to an RB-tree, use the cleanup functions provided to
- * destroy RB-tree items, and clear up the tree.
- * \param tree The reference to the pointer to the tree itself.
- * \param cleanup A function that will take a de-linked rb_tree_node and release its resources
- * \return RB_OK on success, an error code otherwise
- * \note Will set the pointer to the tree to NULL upon completion.
- */
-rb_result_t rb_tree_destroy(struct rb_tree *tree,
-                            rb_node_cleanup_t cleanup)
+rb_result_t rb_tree_destroy(struct rb_tree *tree)
 {
     rb_result_t result = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
-
-    if (tree->root != NULL) {
-        RB_ASSERT_ARG(cleanup != NULL);
-
-        /* Clean up remaining tree nodes using cleanup */
-    }
 
     memset(tree, 0, sizeof(struct rb_tree));
 
     return result;
 }
 
-/**
- * \brief Check if an RB-tree is empty (has no nodes)
- * \param tree The tree to check
- * \param is_empty nonzero on true, 0 otherwise
- * \return RB_OK on success, an error code otherwise
- */
 rb_result_t rb_tree_empty(struct rb_tree *tree,
                           int *is_empty)
 {
@@ -116,19 +175,11 @@ rb_result_t rb_tree_empty(struct rb_tree *tree,
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(is_empty != NULL);
 
-    *is_empty = (tree->root == NULL);
+    *is_empty = !!(tree->root == NULL);
 
     return result;
 }
 
-/**
- * \brief Find a node in the RB-tree given the specified key.
- * Given a key, search the RB-tree iteratively until the specified key is found.
- * \param tree The RB-tree to search
- * \param key The key to search for
- * \param value a reference to a pointer to receive the pointer to the rb_tree_node if key is found
- * \return RB_OK on success, an error code otherwise
- */
 rb_result_t rb_tree_find(struct rb_tree *tree,
                          void *key,
                          struct rb_tree_node **value)
@@ -355,20 +406,16 @@ void __helper_rb_tree_insert_rebalance(struct rb_tree *tree,
     }
 }
 
-/**
- * \brief Insert a node into the tree
- * Given a node with a populated key, insert the node into the RB-tree
- * \param tree the RB tree to insert the node into
- * \param node the node to be inserted into the tree
- * \return RB_OK on sucess, an error code otherwise
- */
 rb_result_t rb_tree_insert(struct rb_tree *tree,
+                           void *key,
                            struct rb_tree_node *node)
 {
     rb_result_t result = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(node != NULL);
+
+    node->key = key;
 
     /* Case 1: Simplest case -- tree is empty */
     if (RB_UNLIKELY(tree->root == NULL)) {
@@ -569,23 +616,6 @@ void __helper_rb_tree_delete_rebalance(struct rb_tree *tree,
     }
 }
 
-
-static RB_UNUSED
-void rb_tree_dump_node(const char *label, struct rb_tree_node *node)
-{
-    fprintf(stderr, "%s Node: %p (left = %p, right = %p)\n",
-            label, node->key,
-            (node->left ? node->left->key : NULL),
-            (node->right ? node->right->key : NULL));
-}
-
-/**
- * \brief Remove the specified key from the rb_tree
- * Removes a specified key from the rb_tree and returns a pointer to the node.
- * \param tree The tree we want to remove the node from
- * \param node The the node we want to remove
- * \return RB_OK on success, an error code otherwise
- */
 rb_result_t rb_tree_remove(struct rb_tree *tree,
                            struct rb_tree_node *node)
 {
