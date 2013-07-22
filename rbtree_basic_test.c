@@ -33,6 +33,9 @@
 
 #include <rbtree.h>
 
+#define COLOR_BLACK         0x0
+#define COLOR_RED           0x1
+
 #define TEST_ASSERT(x) \
     do {                            \
         if (!(x)) {                 \
@@ -59,6 +62,62 @@
 
 #define ARRAY_LEN(x)        ((sizeof((x))/sizeof((*x))))
 
+/**
+ * Sample item that one might store in a red-black tree.
+ */
+struct test_rbtree_node {
+    /** Red-black tree node data */
+    struct rb_tree_node node;
+    /** Some satellite data for a node */
+    int test;
+};
+
+static
+int rbtree_assert(struct rb_tree *my_tree, struct test_rbtree_node *nodes,
+                  size_t node_count)
+{
+    int prev_black_height = 0;
+
+    for (size_t i = 0; i < node_count; ++i) {
+        struct rb_tree_node *node = &(nodes[i].node);
+        struct rb_tree_node *parent = node->parent;
+        struct rb_tree_node *left = node->left;
+        struct rb_tree_node *right = node->right;
+        struct rb_tree_node *tmp_node = &(nodes[i].node);
+        int height = 0;
+        int black_height = 0;
+
+        if (parent == NULL && left == NULL && right == NULL) {
+            continue;
+        }
+
+        if (parent == NULL) {
+            TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
+        }
+        
+        if (node->color == COLOR_RED) {
+            TEST_ASSERT((!left || left->color == COLOR_BLACK) && (!right || right->color == COLOR_BLACK));
+        } else {
+            TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
+        } 
+
+        if (left == NULL || right == NULL) {
+            while (tmp_node != NULL) {
+                height++;
+                if (tmp_node->color == COLOR_BLACK) {
+                    black_height++;
+                }
+                tmp_node = tmp_node->parent;
+            }
+            TEST_ASSERT((prev_black_height == 0) || (black_height == prev_black_height));
+            prev_black_height = black_height;
+        }
+
+    }
+
+    return 0;
+}
+
 static
 int test_rbtree_compare(void *lhs, void *rhs)
 {
@@ -83,38 +142,6 @@ void test_rbtree_print(struct rb_tree_node *node)
 {
     int64_t val = (int64_t)(node->key);
     printf("%d", (int)val);
-}
-
-/**
- * Sample item that one might store in a red-black tree.
- */
-struct test_rbtree_node {
-    struct rb_tree_node node;   /** Red-black tree node data */
-    int test;                   /** Some satellite data for a node */
-};
-
-#define COLOR_BLACK         0x0
-#define COLOR_RED           0x1
-
-static
-int rbtree_assert(struct test_rbtree_node *nodes, size_t num_nodes)
-{
-    for (size_t i = 0; i < num_nodes; ++i) {
-        if (nodes[i].node.color == COLOR_RED) {
-            struct rb_tree_node *left = nodes[i].node.left;
-            struct rb_tree_node *right = nodes[i].node.right;
-
-            TEST_ASSERT((!left || left->color == COLOR_BLACK) && (!right || right->color == COLOR_BLACK));
-            if (left) {
-                TEST_ASSERT(test_rbtree_compare(left->key, nodes[i].node.key) < 0);
-            }
-            if (right) {
-                TEST_ASSERT(test_rbtree_compare(right->key, nodes[i].node.key) > 0);
-            }
-        }
-    }
-
-    return 0;
 }
 
 static
@@ -144,7 +171,7 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
         } else {
             printf("nil");
         }
-        printf(";\n");
+        printf("[label=left];\n");
 
         test_rbtree_print(node);
         printf(" -> ");
@@ -153,16 +180,7 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
         } else {
             printf("nil");
         }
-        printf(";\n");
-
-#if 0
-        if (node->parent != NULL) {
-            test_rbtree_print(node);
-            printf(" -> ");
-            test_rbtree_print(node->parent);
-            printf("[style=dashed]\n");
-        }
-#endif
+        printf("[label=right];\n");
     }
     printf("}\n");
 
@@ -183,7 +201,7 @@ int test_rbtree_lifecycle(size_t num_nodes)
     for (size_t i = 0; i < num_nodes; ++i) {
         void *key = (void*)( ((int64_t)i) +  ((i % 2) ? 42 : -42));
         TEST_ASSERT_EQUALS(rb_tree_insert(&my_tree, key, &(nodes[i].node)), RB_OK);
-        if (rbtree_assert(nodes, num_nodes)) {
+        if (rbtree_assert(&my_tree, nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after pseudo-random creation at node %zu.\n", i);
             return -1;
@@ -192,7 +210,7 @@ int test_rbtree_lifecycle(size_t num_nodes)
 
     for (size_t i = 0; i < num_nodes; i += 3) {
         TEST_ASSERT_EQUALS(rb_tree_remove(&my_tree, &(nodes[i].node)), RB_OK);
-        if (rbtree_assert(nodes, num_nodes)) {
+        if (rbtree_assert(&my_tree, nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after deletion of node %zu\n", i);
             return -1;
@@ -224,8 +242,9 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Testing for %d iterations.\n", count);
 
     for (int i = 1; i < count; i++) {
-        fprintf(stderr, "Testing with %d nodes.\n", i);
-        TEST_CASE(test_rbtree_lifecycle(i));
+        if (test_rbtree_lifecycle(i) < 0) {
+            fprintf(stderr, "Test failure: %d nodes.\n", i);
+        }
     }
 
     fprintf(stderr, "Tests complete. %d failures.\n", failures);

@@ -6,7 +6,7 @@ TEST_TARGETS=rbtree_basic_test
 
 OFLAGS=-O0 -g
 
-CFLAGS=$(OFLAGS) -I. -Wall
+CFLAGS=$(OFLAGS) -I. -Wall -std=c99
 
 all: $(TARGET) $(TEST_TARGETS)
 

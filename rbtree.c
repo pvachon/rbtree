@@ -620,19 +620,19 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
                            struct rb_tree_node *node)
 {
     rb_result_t result = RB_OK;
+    struct rb_tree_node *y;
+    struct rb_tree_node *x, *xp;
+    int y_color = 0, is_left = 0;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(node != NULL);
 
-    struct rb_tree_node *y;
 
     if (node->left == NULL || node->right == NULL) {
         y = node;
     } else {
         y = __helper_rb_tree_find_successor(node);
     }
-
-    struct rb_tree_node *x, *xp;
 
     if (y->left != NULL) {
         x = y->left;
@@ -647,7 +647,6 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
         xp = y->parent;
     }
 
-    int is_left = 0;
     if (y->parent == NULL) {
         tree->root = x;
         xp = NULL;
@@ -662,6 +661,8 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
         }
     }
 
+    y_color = y->color;
+
     /* Swap in the node */
     if (y != node) {
         __helper_rb_tree_swap_node(tree, node, y);
@@ -670,7 +671,7 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
         }
     }
 
-    if (y->color == COLOR_BLACK) {
+    if (y_color == COLOR_BLACK) {
         __helper_rb_tree_delete_rebalance(tree, x, xp, is_left);
     }
 
