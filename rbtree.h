@@ -65,7 +65,7 @@ struct rb_tree_node {
  *  0 if lhs == rhs
  *  [-inf, 0) if lhs < rhs
  */
-typedef int (*rb_cmp_func_t)(void *lhs, void *rhs);
+typedef int (*rb_cmp_func_t)(const void *lhs, const void *rhs);
 
 /**
  * Structure representing an RB tree's associated state. Contains all

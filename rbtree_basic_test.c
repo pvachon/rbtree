@@ -94,12 +94,12 @@ int rbtree_assert(struct rb_tree *my_tree, struct test_rbtree_node *nodes,
         if (parent == NULL) {
             TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
         }
-        
+
         if (node->color == COLOR_RED) {
             TEST_ASSERT((!left || left->color == COLOR_BLACK) && (!right || right->color == COLOR_BLACK));
         } else {
             TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
-        } 
+        }
 
         if (left == NULL || right == NULL) {
             while (tmp_node != NULL) {
@@ -119,7 +119,7 @@ int rbtree_assert(struct rb_tree *my_tree, struct test_rbtree_node *nodes,
 }
 
 static
-int test_rbtree_compare(void *lhs, void *rhs)
+int test_rbtree_compare(const void *lhs, const void *rhs)
 {
     int64_t n_lhs = (int64_t)lhs;
     int64_t n_rhs = (int64_t)rhs;
