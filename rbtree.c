@@ -26,61 +26,20 @@
   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+/** \defgroup rb_tree_implementation Implementation Details
+ * All the implementation details for the red-black tree, including functions for
+ * the maintenance of tree properties.
+ * @{
+ */
+
 /** \file rbtree.c
  * An implementation of an intrusive red-black self-balancing tree, that can
  * be used to implement red-black trees in situations where memory allocation
  * is not an option.
  *
- * The goal of this implementation is to be both easy to use, but also
- * sufficiently powerful enough to perform all the operations that one might
- * typically want to do with a red-black tree.
- *
- * To make a structure usable with an rb_tree, you must embed the structure
- * struct rb_tree_node. 
- * \code
-    struct my_sample_struct {
-        const char *name;
-        int data;
-        struct rb_tree_node rnode;
-    };
- * \endcode
- * \note `rb_tree_node` need not be initialized -- it is initialized during the
- *       insertion operation.
- *
- * Next, you must declare a comparison function that, given a pointer to two
- * keys, returns a value less than 0 if the left-hand side is less than the
- * right-hand side, 0 if the left-hand side is equal to the right-hand side,
- * or greater than 0 if the left-hand side is greater than the left-hand side.
- *
- * A simple example for a string might use the `strcmp(3)` function directly,
- * as such:
- *
- * \code
-    int my_sample_struct_compare_keys(void *lhs, void *rhs)
-    {
-        return strcmp((const char *)lhs, (const char *)rhs);
-    }
- * \endcode
- * \note the function you create for your comparison function must conform to
- *       rb_cmp_func_t, or the compiler will generate a warning and, if you're
- *       unlucky, you will fail catastrophically at a later date.
- *
- * Then, to create a new, empty red-black tree, call rb_tree_new, as so:
- * \code
-    struct rb_tree my_rb_tree;
-    if (rb_tree_new(&my_rb_tree, my_sample_struct_compare_keys) != RB_OK) {
-        exit(EXIT_FAILURE);
-    }
- * \endcode
- *
- * Items can be added to the red-black tree using the function `rb_tree_insert`:
- * \code
-    struct my_sample_struct node = { .name = "test1", .date = 42 };
-    if (rb_tree_insert(&my_rb_tree, node.name, &(node.rnode)) != RB_OK) {
-        printf("Failed to insert a node into the RB tree!\n");
-        exit(EXIT_FAILURE);
-    }
- * \endcode
+ * This file exclusively contains implementation details for the red-black tree, so
+ * probably is not of much interest to most people.
  *
  * \see rbtree.h
  * \see rb_tree
@@ -108,7 +67,7 @@
 #define COLOR_RED           0x1
 /**@}*/
 
-/** \defgroup rb_tree_compiler_prims Compiler Primitives 
+/** \defgroup rb_tree_compiler_prims Compiler Abstractions
  * Primitives used to abstract compiler-specific syntax for common details used in
  * providing hints to the compiler for optimization or linker details.
  * @{
@@ -681,4 +640,66 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
 
     return result;
 }
+
+/** @} rb_tree_implementation */
+
+/**
+ * \mainpage A Non-Intrusive Red-Black Tree
+ *
+ * The goal of this implementation is to be both easy to use, but also
+ * sufficiently powerful enough to perform all the operations that one might
+ * typically want to do with a red-black tree.
+ *
+ * To make a structure usable with an rb_tree, you must embed the structure
+ * struct rb_tree_node. 
+ * \code
+    struct my_sample_struct {
+        const char *name;
+        int data;
+        struct rb_tree_node rnode;
+    };
+ * \endcode
+ * \note `rb_tree_node` need not be initialized -- it is initialized during the
+ *       insertion operation.
+ *
+ * Next, you must declare a comparison function that, given a pointer to two
+ * keys, returns a value less than 0 if the left-hand side is less than the
+ * right-hand side, 0 if the left-hand side is equal to the right-hand side,
+ * or greater than 0 if the left-hand side is greater than the left-hand side.
+ *
+ * A simple example for a string might use the `strcmp(3)` function directly,
+ * as such:
+ *
+ * \code
+    int my_sample_struct_compare_keys(void *lhs, void *rhs)
+    {
+        return strcmp((const char *)lhs, (const char *)rhs);
+    }
+ * \endcode
+ * \note the function you create for your comparison function must conform to
+ *       rb_cmp_func_t, or the compiler will generate a warning and, if you're
+ *       unlucky, you will fail catastrophically at a later date.
+ *
+ * Then, to create a new, empty red-black tree, call rb_tree_new, as so:
+ * \code
+    struct rb_tree my_rb_tree;
+    if (rb_tree_new(&my_rb_tree, my_sample_struct_compare_keys) != RB_OK) {
+        exit(EXIT_FAILURE);
+    }
+ * \endcode
+ *
+ * Items can be added to the red-black tree using the function `rb_tree_insert`:
+ * \code
+    struct my_sample_struct node = { .name = "test1", .date = 42 };
+    if (rb_tree_insert(&my_rb_tree, node.name, &(node.rnode)) != RB_OK) {
+        printf("Failed to insert a node into the RB tree!\n");
+        exit(EXIT_FAILURE);
+    }
+ * \endcode
+ *
+ * \see rb_tree
+ * \see rb_tree_node
+ * \see rb_functions
+ * \see rbtree.h
+ */
 

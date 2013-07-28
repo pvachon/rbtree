@@ -61,9 +61,9 @@ struct rb_tree_node {
 
 /**
  * Pointer to a function to compare two keys, and returns as follows:
- *  (0, +inf] if lhs > rhs
- *  0 if lhs == rhs
- *  [-inf, 0) if lhs < rhs
+ *  - (0, +inf] if lhs > rhs
+ *  - 0 if lhs == rhs
+ *  - [-inf, 0) if lhs < rhs
  */
 typedef int (*rb_cmp_func_t)(const void *lhs, const void *rhs);
 
@@ -120,7 +120,7 @@ typedef int rb_result_t;
 /**@} rb_result_code */
 /**@} rb_result */
 
-/** \brief Helper to get a pointer to a containing structure
+/** \brief Helper to get a pointer to a containing structure.
  * Given a pointer to an rb_tree_node, a target type and a member name,
  * return a pointer to the structure containing the `struct rb_tree_node`.
  * \code{.c}
@@ -156,7 +156,7 @@ typedef int rb_result_t;
  * @{
  */
 /**
- * \brief Construct a new, empty red-black tree
+ * \brief Construct a new, empty red-black tree.
  * Given a region of memory at least the size of a struct rb_tree to
  * store the red-black tree metadata, update it to contain an initialized, empty
  * red-black tree.
@@ -168,15 +168,20 @@ rb_result_t rb_tree_new(struct rb_tree *tree,
                         rb_cmp_func_t compare);
 
 /**
- * \brief Destroy an RB-tree
- * Erase an RB-tree.
+ * \brief Destroy a Red-Black tree.
+ * Clean up the state structure, clearing out the state of the tree
+ * so that it no longer can be used.
+ * \note Assumes that external callers will deallocate all nodes through
+ *       some application-specific mechanism.
  * \param tree The reference to the pointer to the tree itself.
  * \return RB_OK on success, an error code otherwise
  */
 rb_result_t rb_tree_destroy(struct rb_tree *tree);
 
 /**
- * \brief Check if an RB-tree is empty (has no nodes)
+ * \brief Check if an red-black tree is empty (has no nodes).
+ * If no nodes are present, returns a non-zero value in `is_empty` -- returns
+ * 0 if there are nodes present.
  * \param tree The tree to check
  * \param is_empty nonzero on true, 0 otherwise
  * \return RB_OK on success, an error code otherwise
@@ -184,8 +189,9 @@ rb_result_t rb_tree_destroy(struct rb_tree *tree);
 rb_result_t rb_tree_empty(struct rb_tree *tree, int *is_empty);
 
 /**
- * \brief Find a node in the RB-tree given the specified key.
+ * \brief Find a node in the Red-Black tree given the specified key.
  * Given a key, search the RB-tree iteratively until the specified key is found.
+ * This traversal is in O(log n) time, per the properties of a binary search tree.
  * \param tree The RB-tree to search
  * \param key The key to search for
  * \param value a reference to a pointer to receive the pointer to the rb_tree_node if key is found
@@ -196,8 +202,10 @@ rb_result_t rb_tree_find(struct rb_tree *tree,
                          struct rb_tree_node **value);
 
 /**
- * \brief Insert a node into the tree
- * Given a node with a populated key, insert the node into the RB-tree
+ * \brief Insert a node into the tree.
+ * Given a node and key, insert the node into the red-black tree and rebalance
+ * the tree if appropriate. Insertion is O(log n) time, with two tree traversals
+ * possible -- one for insertion (guaranteed) and one for rebalancing.
  * \param tree the RB tree to insert the node into
  * \param key The key for the node (must live as long as the node itself is in the tree)
  * \param node the node to be inserted into the tree
@@ -208,8 +216,9 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
                            struct rb_tree_node *node);
 
 /**
- * \brief Remove the specified node from the rb_tree
- * Removes a specified node from the red-black tree.
+ * \brief Remove the specified node from the Red-Black tree.
+ * Given a pointer to the node, splice the node out of the tree, then, if applicable
+ * rebalance the tree so the Red-Black properties are maintained.
  * \param tree The tree we want to remove the node from
  * \param node The the node we want to remove
  * \return RB_OK on success, an error code otherwise
