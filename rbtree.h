@@ -51,7 +51,7 @@ struct rb_tree_node {
     /**
      * The key for this node
      */
-    void *key;
+    const void *key;
 
     /**
      * The color of the node
@@ -198,7 +198,7 @@ rb_result_t rb_tree_empty(struct rb_tree *tree, int *is_empty);
  * \return RB_OK on success, an error code otherwise
  */
 rb_result_t rb_tree_find(struct rb_tree *tree,
-                         void *key,
+                         const void *key,
                          struct rb_tree_node **value);
 
 /**
@@ -212,7 +212,7 @@ rb_result_t rb_tree_find(struct rb_tree *tree,
  * \return RB_OK on sucess, an error code otherwise
  */
 rb_result_t rb_tree_insert(struct rb_tree *tree,
-                           void *key,
+                           const void *key,
                            struct rb_tree_node *node);
 
 /**

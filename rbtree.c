@@ -140,7 +140,7 @@ rb_result_t rb_tree_empty(struct rb_tree *tree,
 }
 
 rb_result_t rb_tree_find(struct rb_tree *tree,
-                         void *key,
+                         const void *key,
                          struct rb_tree_node **value)
 {
     rb_result_t result = RB_OK;
@@ -366,7 +366,7 @@ void __helper_rb_tree_insert_rebalance(struct rb_tree *tree,
 }
 
 rb_result_t rb_tree_insert(struct rb_tree *tree,
-                           void *key,
+                           const void *key,
                            struct rb_tree_node *node)
 {
     rb_result_t result = RB_OK;
