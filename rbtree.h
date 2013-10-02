@@ -83,6 +83,11 @@ struct rb_tree {
      * Predicate used for traversing the tree
      */
     rb_cmp_func_t compare;
+
+    /**
+     * Left-most node of the red-black tree
+     */
+    struct rb_tree_node *leftmost;
 };
 
 /**@} rb_tree_state */

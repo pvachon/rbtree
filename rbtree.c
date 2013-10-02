@@ -379,6 +379,7 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
     /* Case 1: Simplest case -- tree is empty */
     if (RB_UNLIKELY(tree->root == NULL)) {
         tree->root = node;
+        tree->leftmost = node;
         node->color = COLOR_BLACK;
         goto done;
     }
@@ -386,6 +387,8 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
     /* Otherwise, insert the node as you would typically in a BST */
     struct rb_tree_node *nd = tree->root;
     node->color = COLOR_RED;
+
+    int leftmost = 1;
 
     /* Insert a node into the tree as you normally would */
     while (nd != NULL) {
@@ -404,6 +407,7 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
                 nd = nd->left;
             }
         } else {
+            leftmost = 0;
             if (nd->right == NULL) {
                 nd->right = node;
                 break;
@@ -414,6 +418,11 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
     }
 
     node->parent = nd;
+
+    /* Update the leftmost node of the tree if appropriate */
+    if (1 == leftmost) {
+        tree->leftmost = node;
+    }
 
     /* Rebalance the tree about the node we just added */
     __helper_rb_tree_insert_rebalance(tree, node);
@@ -589,6 +598,10 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
 
     if (node->left == NULL || node->right == NULL) {
         y = node;
+        if (node == tree->leftmost) {
+            /* The new left-most node is our successor */
+            tree->leftmost = __helper_rb_tree_find_successor(node);
+        }
     } else {
         y = __helper_rb_tree_find_successor(node);
     }
