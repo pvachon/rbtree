@@ -186,6 +186,20 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
 
 }
 
+static inline
+int64_t test_rbtree_find_least_node(struct test_rbtree_node *nodes, size_t count)
+{
+    int64_t least = INT64_MAX;
+
+    for (size_t i = 0; i < count; i++) {
+        int64_t val = (int64_t)nodes[i].node.key;
+
+        if (val < least) least = val;
+    }
+
+    return least;
+}
+
 int test_rbtree_lifecycle(size_t num_nodes)
 {
     struct rb_tree my_tree;
@@ -201,6 +215,10 @@ int test_rbtree_lifecycle(size_t num_nodes)
     for (size_t i = 0; i < num_nodes; ++i) {
         void *key = (void*)( ((int64_t)i) +  ((i % 2) ? 42 : -42));
         TEST_ASSERT_EQUALS(rb_tree_insert(&my_tree, key, &(nodes[i].node)), RB_OK);
+        struct rb_tree_node *tnode = NULL;
+        TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
+        TEST_ASSERT_EQUALS((int64_t)tnode->key, -42);
+
         if (rbtree_assert(&my_tree, nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after pseudo-random creation at node %zu.\n", i);
@@ -208,8 +226,25 @@ int test_rbtree_lifecycle(size_t num_nodes)
         }
     }
 
+    struct rb_tree_node *tnode = NULL;
+    TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
+    TEST_ASSERT_EQUALS((int64_t)tnode->key, -42);
+
     for (size_t i = 0; i < num_nodes; i += 3) {
         TEST_ASSERT_EQUALS(rb_tree_remove(&my_tree, &(nodes[i].node)), RB_OK);
+        /* Deleted nodes are tagged as INT64_MAX to make it easier to pick them
+         * out of the array of nodes.
+         */
+        nodes[i].node.key = (void *)INT64_MAX;
+        if (num_nodes > 1) {
+            struct rb_tree_node *tnode = NULL;
+            int64_t least = test_rbtree_find_least_node(nodes, num_nodes);
+            TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
+            TEST_ASSERT_NOT_EQUALS(tnode, NULL);
+            TEST_ASSERT_EQUALS((int64_t)tnode->key, least);
+        }
+
+        /* Assert that the tree is actually correct */
         if (rbtree_assert(&my_tree, nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after deletion of node %zu\n", i);

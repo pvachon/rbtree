@@ -10,6 +10,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#include <stdlib.h>
+
 /** \defgroup rb_tree_state State Structures
  * Structures that are used to represent state of a red-black tree, including the
  * state of the tree itself, comparison functions used to determine how the tree
@@ -230,6 +232,26 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
  */
 rb_result_t rb_tree_remove(struct rb_tree *tree,
                            struct rb_tree_node *node);
+
+/**
+ * Get the left-most element of the current tree (tracked dynamically
+ * during insertions and removals). This operation is constant-time.
+ * \param tree The tree to get this data element from.
+ * \param leftmost The left-most element, returned by reference.
+ * \return RB_OK on success, an error code otherwise.
+ */
+static inline
+rb_result_t rb_tree_get_leftmost(struct rb_tree *tree,
+                                 struct rb_tree_node **leftmost)
+{
+    if ( (NULL == tree) || (NULL == leftmost) ) {
+        return RB_BAD_ARG;
+    }
+
+    *leftmost = tree->leftmost;
+
+    return RB_OK;
+}
 
 /**@} rb_functions */
 
