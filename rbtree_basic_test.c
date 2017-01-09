@@ -187,17 +187,17 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
 }
 
 static inline
-int64_t test_rbtree_find_least_node(struct test_rbtree_node *nodes, size_t count)
+int64_t test_rbtree_find_greatest_node(struct test_rbtree_node *nodes, size_t count)
 {
-    int64_t least = INT64_MAX;
+    int64_t greatest = INT64_MIN;
 
     for (size_t i = 0; i < count; i++) {
         int64_t val = (int64_t)nodes[i].node.key;
 
-        if (val < least) least = val;
+        if (val > greatest) greatest = val;
     }
 
-    return least;
+    return greatest;
 }
 
 int test_rbtree_lifecycle(size_t num_nodes)
@@ -215,10 +215,6 @@ int test_rbtree_lifecycle(size_t num_nodes)
     for (size_t i = 0; i < num_nodes; ++i) {
         void *key = (void*)( ((int64_t)i) +  ((i % 2) ? 42 : -42));
         TEST_ASSERT_EQUALS(rb_tree_insert(&my_tree, key, &(nodes[i].node)), RB_OK);
-        struct rb_tree_node *tnode = NULL;
-        TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
-        TEST_ASSERT_EQUALS((int64_t)tnode->key, -42);
-
         if (rbtree_assert(&my_tree, nodes, num_nodes)) {
             rbtree_print(&my_tree, nodes, num_nodes);
             fprintf(stderr, "ERROR: tree is invalid after pseudo-random creation at node %zu.\n", i);
@@ -227,21 +223,25 @@ int test_rbtree_lifecycle(size_t num_nodes)
     }
 
     struct rb_tree_node *tnode = NULL;
-    TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
-    TEST_ASSERT_EQUALS((int64_t)tnode->key, -42);
+    TEST_ASSERT_EQUALS(rb_tree_get_rightmost(&my_tree, &tnode), RB_OK);
+    TEST_ASSERT_EQUALS((int64_t)tnode->key, num_nodes + 42 - 1 - (num_nodes & 1));
+    TEST_ASSERT_EQUALS((int64_t)tnode->key, test_rbtree_find_greatest_node(nodes, num_nodes));
 
     for (size_t i = 0; i < num_nodes; i += 3) {
         TEST_ASSERT_EQUALS(rb_tree_remove(&my_tree, &(nodes[i].node)), RB_OK);
-        /* Deleted nodes are tagged as INT64_MAX to make it easier to pick them
+        /* Deleted nodes are tagged as INT64_MIN to make it easier to pick them
          * out of the array of nodes.
          */
-        nodes[i].node.key = (void *)INT64_MAX;
+        nodes[i].node.key = (void *)INT64_MIN;
         if (num_nodes > 1) {
             struct rb_tree_node *tnode = NULL;
-            int64_t least = test_rbtree_find_least_node(nodes, num_nodes);
-            TEST_ASSERT_EQUALS(rb_tree_get_leftmost(&my_tree, &tnode), RB_OK);
+            int64_t greatest = test_rbtree_find_greatest_node(nodes, num_nodes);
+            TEST_ASSERT_EQUALS(rb_tree_get_rightmost(&my_tree, &tnode), RB_OK);
             TEST_ASSERT_NOT_EQUALS(tnode, NULL);
-            TEST_ASSERT_EQUALS((int64_t)tnode->key, least);
+            TEST_ASSERT_EQUALS((int64_t)tnode->key, greatest);
+        } else {
+            TEST_ASSERT_EQUALS(rb_tree_get_rightmost(&my_tree, &tnode), RB_OK);
+            TEST_ASSERT_EQUALS(tnode, NULL);
         }
 
         /* Assert that the tree is actually correct */
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
 
     fprintf(stderr, "Testing for %d iterations.\n", count);
 
-    for (int i = 1; i < count; i++) {
+    for (int i = 2; i < count; i++) {
         if (test_rbtree_lifecycle(i) < 0) {
             fprintf(stderr, "Test failure: %d nodes.\n", i);
         }

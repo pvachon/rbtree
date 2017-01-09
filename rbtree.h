@@ -11,6 +11,30 @@ extern "C" {
 #endif /* __cplusplus */
 
 #include <stdlib.h>
+#include <assert.h>
+
+/** \defgroup rb_tree_compiler_prims Compiler Abstractions
+ * Primitives used to abstract compiler-specific syntax for common details used in
+ * providing hints to the compiler for optimization or linker details.
+ * @{
+ */
+
+/**
+ * Macro to check if a given assertion about an argument is true
+ */
+#define RB_ASSERT_ARG(x) \
+    do {                                \
+        if (RB_UNLIKELY(!(x))) {        \
+            assert(#x && 0);            \
+            return RB_BAD_ARG;          \
+        }                               \
+    } while (0)
+
+/**
+ * The tagged branch is unlikely to be taken
+ */
+#define RB_UNLIKELY(x) __builtin_expect(!!(x), 0)
+/**@}*/
 
 /** \defgroup rb_tree_state State Structures
  * Structures that are used to represent state of a red-black tree, including the
@@ -70,6 +94,15 @@ struct rb_tree_node {
 typedef int (*rb_cmp_func_t)(const void *lhs, const void *rhs);
 
 /**
+ * Pointer to a comparison function that allows passing along state.
+ * Return values are interpreted as follows:
+ *  (0, +inf] if lhs > rhs
+ *  0 if lhs == rhs
+ *  [-inf, 0) if lhs < rhs
+ */
+typedef int (*rb_cmp_func_ex_t)(void *state, const void *lhs, const void *rhs);
+
+/**
  * Structure representing an RB tree's associated state. Contains all
  * the information needed to manage the lifecycle of a RB tree.
  * \note Typically users should not directly manipulate the structure,
@@ -84,12 +117,17 @@ struct rb_tree {
     /**
      * Predicate used for traversing the tree
      */
-    rb_cmp_func_t compare;
+    rb_cmp_func_ex_t compare;
 
     /**
-     * Left-most node of the red-black tree
+     * The right-most node of the rb-tree
      */
-    struct rb_tree_node *leftmost;
+    struct rb_tree_node *rightmost;
+
+    /**
+     * Private state that can be used by the rb-tree owner
+     */
+    void *state;
 };
 
 /**@} rb_tree_state */
@@ -162,6 +200,19 @@ typedef int rb_result_t;
  * inluding lifecycle functions and member manipulation and state checking functions.
  * @{
  */
+
+/**
+ * \brief Construct a new, empty red-black tree, with extended state
+ * Given a region of memory at least the size of a struct rb_tree to
+ * store the red-black tree metadata, update it to contain an initialized, empty
+ * red-black tree, with given private state.
+ * \param tree Pointer to the new tree.
+ * \param compare Function used to traverse the tree.
+ * \param state The private state to be passed to the compare function
+ * \return RB_OK on success, an error code otherwise
+ */
+rb_result_t rb_tree_new_ex(struct rb_tree *tree, rb_cmp_func_ex_t compare, void *state);
+
 /**
  * \brief Construct a new, empty red-black tree.
  * Given a region of memory at least the size of a struct rb_tree to
@@ -234,23 +285,164 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
                            struct rb_tree_node *node);
 
 /**
- * Get the left-most element of the current tree (tracked dynamically
- * during insertions and removals). This operation is constant-time.
- * \param tree The tree to get this data element from.
- * \param leftmost The left-most element, returned by reference.
- * \return RB_OK on success, an error code otherwise.
+ * \brief Find a node. If not found, insert the candidate.
+ * Find a node with the given key. If the node is found, return it by
+ * reference, without modifying the tree. If the node is not found,
+ * insert the provided candidate node.
+ * \note This function always will return in *value the node inserted
+ *       or the existing node. If you want to check if the candidate
+ *       node was inserted, check if `*value == new_candidate`
+ *
+ * \param tree The tree in question
+ * \param key The key to search for
+ * \param new_candidate The candidate node to insert
+ * \param value The value at the given location
+ * \return RB_OK on success, an error code otherwise
+ */
+rb_result_t rb_tree_find_or_insert(struct rb_tree *tree,
+                                   void *key,
+                                   struct rb_tree_node *new_candidate,
+                                   struct rb_tree_node **value);
+
+/**
+ * \brief Find a node. If not found, insert the candidate.
+ * Find a node with the given key. If the node is found, return it by
+ * reference, without modifying the tree. If the node is not found,
+ * insert the provided candidate node.
+ * \note This function always will return in *value the node inserted
+ *       or the existing node. If you want to check if the candidate
+ *       node was inserted, check if `*value == new_candidate`
+ *
+ * \param tree The tree in question
+ * \param key The key to search for
+ * \param new_candidate The candidate node to insert
+ * \param value The value at the given location
+ *
+ * \return RB_OK on success, an error code otherwise
+ */
+rb_result_t rb_tree_find_or_insert(struct rb_tree *tree,
+                                   void *key,
+                                   struct rb_tree_node *new_candidate,
+                                   struct rb_tree_node **value);
+/**
+ * \brief Get the rightmost (greatest relative to predicate) node.
+ * Return the rightmost (i.e. greatest relative to predicate) node of the Red-Black tree.
  */
 static inline
-rb_result_t rb_tree_get_leftmost(struct rb_tree *tree,
-                                 struct rb_tree_node **leftmost)
+rb_result_t rb_tree_get_rightmost(struct rb_tree *tree,
+                                  struct rb_tree_node **rightmost)
 {
-    if ( (NULL == tree) || (NULL == leftmost) ) {
+    if ( (NULL == tree) || (NULL == rightmost) ) {
         return RB_BAD_ARG;
     }
 
-    *leftmost = tree->leftmost;
+    *rightmost = tree->rightmost;
 
     return RB_OK;
+}
+
+
+/**
+ * Find the minimum of the given tree/subtree rooted at the given node.
+ */
+static inline
+rb_result_t __rb_tree_find_minimum(struct rb_tree_node *root,
+                                   struct rb_tree_node **min)
+{
+    struct rb_tree_node *x = root;
+
+    while (x->left != NULL) {
+        x = x->left;
+    }
+
+    *min = x;
+
+    return RB_OK;
+}
+
+/**
+ * Find the maximum of the given tree/subtree rooted at the given node.
+ */
+static inline
+rb_result_t __rb_tree_find_maximum(struct rb_tree_node *root,
+                                   struct rb_tree_node **max)
+{
+    struct rb_tree_node *x = root;
+
+    while (x->right != NULL) {
+        x = x->right;
+    }
+
+    *max = x;
+
+    return RB_OK;
+}
+
+/**
+ * Find the successor (greater than, relative to predicate) node of the given node.
+ */
+static inline
+rb_result_t rb_tree_find_successor(struct rb_tree *tree,
+                                   struct rb_tree_node *node,
+                                   struct rb_tree_node **successor)
+{
+    rb_result_t ret = RB_OK;
+
+    RB_ASSERT_ARG(tree != NULL);
+    RB_ASSERT_ARG(node != NULL);
+    RB_ASSERT_ARG(successor != NULL);
+
+    struct rb_tree_node *x = node;
+
+    if (x->right != NULL) {
+        __rb_tree_find_minimum(x->right, successor);
+        goto done;
+    }
+
+    struct rb_tree_node *y = x->parent;
+
+    while (y != NULL && (x == y->right)) {
+        x = y;
+        y = y->parent;
+    }
+
+    *successor = y;
+
+done:
+    return ret;
+}
+
+/**
+ * Find the predecessor (less than, relative to predicate) node of the given node.
+ */
+static inline
+rb_result_t rb_tree_find_predecessor(struct rb_tree *tree,
+                                     struct rb_tree_node *node,
+                                     struct rb_tree_node **pred)
+{
+    rb_result_t ret = RB_OK;
+    struct rb_tree_node *x = node;
+
+    RB_ASSERT_ARG(tree != NULL);
+    RB_ASSERT_ARG(node != NULL);
+    RB_ASSERT_ARG(pred != NULL);
+
+    if (x->left != NULL) {
+        __rb_tree_find_maximum(x->left, pred);
+        goto done;
+    }
+
+    struct rb_tree_node *y = x->parent;
+
+    while (y != NULL && (x == y->left)) {
+        x = y;
+        y = y->parent;
+    }
+
+    *pred = y;
+
+done:
+    return ret;
 }
 
 /**@} rb_functions */

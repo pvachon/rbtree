@@ -26,7 +26,6 @@
   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 /** \defgroup rb_tree_implementation Implementation Details
  * All the implementation details for the red-black tree, including functions for
  * the maintenance of tree properties.
@@ -49,7 +48,6 @@
 #include <rbtree.h>
 
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 
 /** \defgroup rb_tree_colors Colors for the red-black tree nodes
@@ -67,99 +65,83 @@
 #define COLOR_RED           0x1
 /**@}*/
 
-/** \defgroup rb_tree_compiler_prims Compiler Abstractions
- * Primitives used to abstract compiler-specific syntax for common details used in
- * providing hints to the compiler for optimization or linker details.
- * @{
- */
-
-/**
- * The tagged branch is unlikely to be taken
- */
-#define RB_UNLIKELY(x) __builtin_expect(!!(x), 0)
-
-/**
- * The tagged branch is likely to be taken
- */
-#define RB_LIKELY(x)   __builtin_expect(!!(x), 1)
-
-/**
- * Indicate that the tagged item can legally be unused in the compilation unit and
- * that the compiler should not generate a warning
- */
-#define RB_UNUSED      __attribute__((unused))
-/**@}*/
-
-/**
- * Macro to check if a given assertion about an argument is true
- */
-#define RB_ASSERT_ARG(x) \
-    do {                                \
-        if (RB_UNLIKELY(!(x))) {        \
-            assert(#x && 0);            \
-            return RB_BAD_ARG;          \
-        }                               \
-    } while (0)
-
-rb_result_t rb_tree_new(struct rb_tree *tree,
-                        rb_cmp_func_t compare)
+static
+int __rb_tree_cmp_mapper(void *state, const void *lhs, const void *rhs)
 {
-    rb_result_t result = RB_OK;
+    rb_cmp_func_t cmp = state;
+    return cmp(lhs, rhs);
+}
+
+rb_result_t rb_tree_new_ex(struct rb_tree *tree,
+                           rb_cmp_func_ex_t compare,
+                           void *state)
+{
+    rb_result_t ret = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(compare != NULL);
 
     tree->root = NULL;
     tree->compare = compare;
+    tree->state = state;
+    tree->rightmost = NULL;
 
-    return result;
+    return ret;
+}
+
+rb_result_t rb_tree_new(struct rb_tree *tree,
+                        rb_cmp_func_t compare)
+{
+    RB_ASSERT_ARG(tree != NULL);
+    RB_ASSERT_ARG(compare != NULL);
+
+    return rb_tree_new_ex(tree, __rb_tree_cmp_mapper, (void *)compare);
 }
 
 rb_result_t rb_tree_destroy(struct rb_tree *tree)
 {
-    rb_result_t result = RB_OK;
+    rb_result_t ret = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
 
     memset(tree, 0, sizeof(struct rb_tree));
 
-    return result;
+    return ret;
 }
 
 rb_result_t rb_tree_empty(struct rb_tree *tree,
                           int *is_empty)
 {
-    rb_result_t result = RB_OK;
+    rb_result_t ret = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(is_empty != NULL);
 
     *is_empty = !!(tree->root == NULL);
 
-    return result;
+    return ret;
 }
 
 rb_result_t rb_tree_find(struct rb_tree *tree,
                          const void *key,
                          struct rb_tree_node **value)
 {
-    rb_result_t result = RB_OK;
+    rb_result_t ret = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
-    RB_ASSERT_ARG(key != NULL);
     RB_ASSERT_ARG(value != NULL);
 
     *value = NULL;
 
     if (RB_UNLIKELY(tree->root == NULL)) {
-        result = RB_NOT_FOUND;
+        ret = RB_NOT_FOUND;
         goto done;
     }
 
     struct rb_tree_node *node = tree->root;
 
     while (node != NULL) {
-        int compare = tree->compare(key, node->key);
+        int compare = tree->compare(tree->state, key, node->key);
 
         if (compare < 0) {
             node = node->left;
@@ -172,7 +154,7 @@ rb_result_t rb_tree_find(struct rb_tree *tree,
     }
 
     if (node == NULL) {
-        result = RB_NOT_FOUND;
+        ret = RB_NOT_FOUND;
         goto done;
     }
 
@@ -180,7 +162,7 @@ rb_result_t rb_tree_find(struct rb_tree *tree,
     *value = node;
 
 done:
-    return result;
+    return ret;
 }
 
 /* Helper function to get a node's sibling */
@@ -304,7 +286,7 @@ void __helper_rb_tree_insert_rebalance(struct rb_tree *tree,
     if (new_node_parent != NULL && new_node_parent->color != COLOR_BLACK) {
         struct rb_tree_node *pnode = node;
 
-        /* Iterate until we're at the root (which we just color black) or 
+        /* Iterate until we're at the root (which we just color black) or
          * until we the parent node is no longer red.
          */
         while ((tree->root != pnode) && (pnode->parent != NULL) &&
@@ -369,37 +351,44 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
                            const void *key,
                            struct rb_tree_node *node)
 {
-    rb_result_t result = RB_OK;
+    rb_result_t ret = RB_OK;
+
+    int rightmost = 1;
+    struct rb_tree_node *nd = NULL;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(node != NULL);
 
+    node->left = NULL;
+    node->right = NULL;
+    node->parent = NULL;
     node->key = key;
 
     /* Case 1: Simplest case -- tree is empty */
     if (RB_UNLIKELY(tree->root == NULL)) {
         tree->root = node;
-        tree->leftmost = node;
+        tree->rightmost = node;
         node->color = COLOR_BLACK;
         goto done;
     }
 
     /* Otherwise, insert the node as you would typically in a BST */
-    struct rb_tree_node *nd = tree->root;
+    nd = tree->root;
     node->color = COLOR_RED;
 
-    int leftmost = 1;
+    rightmost = 1;
 
     /* Insert a node into the tree as you normally would */
     while (nd != NULL) {
-        int compare = tree->compare(node->key, nd->key);
+        int compare = tree->compare(tree->state, node->key, nd->key);
 
         if (compare == 0) {
-            result = RB_DUPLICATE;
+            ret = RB_DUPLICATE;
             goto done;
         }
 
         if (compare < 0) {
+            rightmost = 0;
             if (nd->left == NULL) {
                 nd->left = node;
                 break;
@@ -407,7 +396,6 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
                 nd = nd->left;
             }
         } else {
-            leftmost = 0;
             if (nd->right == NULL) {
                 nd->right = node;
                 break;
@@ -419,16 +407,89 @@ rb_result_t rb_tree_insert(struct rb_tree *tree,
 
     node->parent = nd;
 
-    /* Update the leftmost node of the tree if appropriate */
-    if (1 == leftmost) {
-        tree->leftmost = node;
+    if (1 == rightmost) {
+        tree->rightmost = node;
     }
 
     /* Rebalance the tree about the node we just added */
     __helper_rb_tree_insert_rebalance(tree, node);
 
 done:
-    return result;
+    return ret;
+}
+
+rb_result_t rb_tree_find_or_insert(struct rb_tree *tree,
+                                   void *key,
+                                   struct rb_tree_node *new_candidate,
+                                   struct rb_tree_node **value)
+{
+    rb_result_t ret = RB_OK;
+
+    RB_ASSERT_ARG(tree != NULL);
+    RB_ASSERT_ARG(value != NULL);
+    RB_ASSERT_ARG(new_candidate != NULL);
+
+    *value = NULL;
+    new_candidate->key = key;
+
+    struct rb_tree_node *node = tree->root;
+
+    /* Case 1: Tree is empty, so we just insert the node */
+    if (RB_UNLIKELY(tree->root == NULL)) {
+        tree->root = new_candidate;
+        tree->rightmost = new_candidate;
+        new_candidate->color = COLOR_BLACK;
+        node = new_candidate;
+        goto done;
+    }
+
+    struct rb_tree_node *node_prev = NULL;
+    int dir = 0, rightmost = 1;
+    while (node != NULL) {
+        int compare = tree->compare(tree->state, key, node->key);
+
+        if (compare < 0) {
+            node_prev = node;
+            dir = 0;
+            node = node->left;
+            rightmost = 0;
+        } else if (compare == 0) {
+            break; /* We found our node */
+        } else {
+            /* Otherwise, we want the right node, and continue iteration */
+            node_prev = node;
+            dir = 1;
+            node = node->right;
+        }
+    }
+
+    /* Case 2 - we didn't find the node, so insert the candidate */
+    if (node == NULL) {
+        if (dir == 0) {
+            rightmost = 0;
+            node_prev->left = new_candidate;
+        } else {
+            node_prev->right = new_candidate;
+        }
+
+        new_candidate->parent = node_prev;
+
+        node = new_candidate;
+        node->color = COLOR_RED;
+
+        if (1 == rightmost) {
+            tree->rightmost = new_candidate;
+        }
+
+        /* Rebalance the tree, preserving rb properties */
+        __helper_rb_tree_insert_rebalance(tree, node);
+    }
+
+done:
+    /* Return the node we found */
+    *value = node;
+
+    return ret;
 }
 
 /**
@@ -441,6 +502,18 @@ struct rb_tree_node *__helper_rb_tree_find_minimum(struct rb_tree_node *node)
 
     while (x->left != NULL) {
         x = x->left;
+    }
+
+    return x;
+}
+
+static
+struct rb_tree_node *__helper_rb_tree_find_maximum(struct rb_tree_node *node)
+{
+    struct rb_tree_node *x = node;
+
+    while (x->right != NULL) {
+        x = x->right;
     }
 
     return x;
@@ -464,6 +537,26 @@ struct rb_tree_node *__helper_rb_tree_find_successor(struct rb_tree_node *node)
 
     return y;
 }
+
+static
+struct rb_tree_node *__helper_rb_tree_find_predecessor(struct rb_tree_node *node)
+{
+    struct rb_tree_node *x = node;
+
+    if (x->left != NULL) {
+        return __helper_rb_tree_find_maximum(x->left);
+    }
+
+    struct rb_tree_node *y = x->parent;
+
+    while (y != NULL && x == y->left) {
+        x = y;
+        y = y->parent;
+    }
+
+    return y;
+}
+
 
 /* Replace x with y, inserting y where x previously was */
 static
@@ -587,24 +680,25 @@ void __helper_rb_tree_delete_rebalance(struct rb_tree *tree,
 rb_result_t rb_tree_remove(struct rb_tree *tree,
                            struct rb_tree_node *node)
 {
-    rb_result_t result = RB_OK;
-    struct rb_tree_node *y;
-    struct rb_tree_node *x, *xp;
-    int y_color = 0, is_left = 0;
+    rb_result_t ret = RB_OK;
 
     RB_ASSERT_ARG(tree != NULL);
     RB_ASSERT_ARG(node != NULL);
 
+    struct rb_tree_node *y;
+
 
     if (node->left == NULL || node->right == NULL) {
         y = node;
-        if (node == tree->leftmost) {
-            /* The new left-most node is our successor */
-            tree->leftmost = __helper_rb_tree_find_successor(node);
+        if (node == tree->rightmost) {
+            /* The new rightmost item is our successor */
+            tree->rightmost = __helper_rb_tree_find_predecessor(node);
         }
     } else {
         y = __helper_rb_tree_find_successor(node);
     }
+
+    struct rb_tree_node *x, *xp;
 
     if (y->left != NULL) {
         x = y->left;
@@ -619,6 +713,7 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
         xp = y->parent;
     }
 
+    int is_left = 0;
     if (y->parent == NULL) {
         tree->root = x;
         xp = NULL;
@@ -633,7 +728,7 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
         }
     }
 
-    y_color = y->color;
+    int y_color = y->color;
 
     /* Swap in the node */
     if (y != node) {
@@ -651,13 +746,11 @@ rb_result_t rb_tree_remove(struct rb_tree *tree,
     node->left = NULL;
     node->right = NULL;
 
-    return result;
+    return ret;
 }
 
-/** @} rb_tree_implementation */
-
 /**
- * \mainpage A Non-Intrusive Red-Black Tree
+ * \mainpage An Intrusive Red-Black Tree
  *
  * The goal of this implementation is to be both easy to use, but also
  * sufficiently powerful enough to perform all the operations that one might
