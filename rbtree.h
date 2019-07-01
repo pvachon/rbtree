@@ -13,6 +13,13 @@ extern "C" {
 #include <stdlib.h>
 #include <assert.h>
 
+/*
+ * Determine if we should use decorated pointers instead of a flag field in the node
+ */
+#if defined(__x86_64) && defined(_LP64)
+#define _RB_USE_AUGMENTED_PTR
+#endif
+
 /** \defgroup rb_tree_compiler_prims Compiler Abstractions
  * Primitives used to abstract compiler-specific syntax for common details used in
  * providing hints to the compiler for optimization or linker details.
@@ -70,7 +77,9 @@ struct rb_tree_node {
     struct rb_tree_node *right;
 
     /**
-     * The parent of this node (`NULL` if at root)
+     * The parent of this node (`NULL` if at root). Note that this is not a
+     * raw pointer, but also doubles as the storage of the current node
+     * color, if _RB_USE_AUGMENTED_PTR is set at compile time.
      */
     struct rb_tree_node *parent;
 
@@ -79,10 +88,12 @@ struct rb_tree_node {
      */
     const void *key;
 
+#ifndef _RB_USE_AUGMENTED_PTR /* Not using augmented pointer; i.e. a 32-bit platform */
     /**
-     * The color of the node
+     * The color of this node
      */
-    int color;
+    unsigned color;
+#endif
 };
 
 /**

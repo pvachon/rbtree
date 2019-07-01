@@ -36,6 +36,20 @@
 #define COLOR_BLACK         0x0
 #define COLOR_RED           0x1
 
+#ifdef _RB_USE_AUGMENTED_PTR /* Should we augment the pointer with the color metadata */
+#define RB_TREE_COLOR_SHIFT                         63 /* TODO: parameterize me */
+#define RB_TREE_PARENT_PTR_MASK                     ((1ull << RB_TREE_COLOR_SHIFT) - 1)
+#define RB_TREE_NODE_GET_COLOR(_node)               ((((size_t)(_node)->parent) >> RB_TREE_COLOR_SHIFT) & 1)
+#define RB_TREE_NODE_GET_PARENT(_node)              ((struct rb_tree_node *)(((size_t)(_node)->parent) & RB_TREE_PARENT_PTR_MASK))
+#else /* !defined(_RB_USE_AUGMENTED_PTR) */
+
+#define RB_TREE_NODE_GET_COLOR(_node)               ((_node)->color)
+#define RB_TREE_NODE_SET_COLOR(_node, _color)       do { ((_node)->color = (_color)); } while (0)
+#define RB_TREE_NODE_GET_PARENT(_node)              ((_node)->parent)
+#define RB_TREE_NODE_SET_PARENT(_node, _parent)     do { ((_node)->parent = (_parent)); } while (0)
+
+#endif /* defined(_RB_USE_AUGMENTED_PTR) */
+
 #define TEST_ASSERT(x) \
     do {                            \
         if (!(x)) {                 \
@@ -80,7 +94,7 @@ int rbtree_assert(struct rb_tree *my_tree, struct test_rbtree_node *nodes,
 
     for (size_t i = 0; i < node_count; ++i) {
         struct rb_tree_node *node = &(nodes[i].node);
-        struct rb_tree_node *parent = node->parent;
+        struct rb_tree_node *parent = RB_TREE_NODE_GET_PARENT(node);
         struct rb_tree_node *left = node->left;
         struct rb_tree_node *right = node->right;
         struct rb_tree_node *tmp_node = &(nodes[i].node);
@@ -92,22 +106,22 @@ int rbtree_assert(struct rb_tree *my_tree, struct test_rbtree_node *nodes,
         }
 
         if (parent == NULL) {
-            TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
+            TEST_ASSERT_EQUALS(RB_TREE_NODE_GET_COLOR(node), COLOR_BLACK);
         }
 
-        if (node->color == COLOR_RED) {
-            TEST_ASSERT((!left || left->color == COLOR_BLACK) && (!right || right->color == COLOR_BLACK));
+        if (RB_TREE_NODE_GET_COLOR(node) == COLOR_RED) {
+            TEST_ASSERT((!left || RB_TREE_NODE_GET_COLOR(left) == COLOR_BLACK) && (!right || RB_TREE_NODE_GET_COLOR(right) == COLOR_BLACK));
         } else {
-            TEST_ASSERT_EQUALS(node->color, COLOR_BLACK);
+            TEST_ASSERT_EQUALS(RB_TREE_NODE_GET_COLOR(node), COLOR_BLACK);
         }
 
         if (left == NULL || right == NULL) {
             while (tmp_node != NULL) {
                 height++;
-                if (tmp_node->color == COLOR_BLACK) {
+                if (RB_TREE_NODE_GET_COLOR(tmp_node) == COLOR_BLACK) {
                     black_height++;
                 }
-                tmp_node = tmp_node->parent;
+                tmp_node = RB_TREE_NODE_GET_PARENT(tmp_node);
             }
             TEST_ASSERT((prev_black_height == 0) || (black_height == prev_black_height));
             prev_black_height = black_height;
@@ -153,7 +167,7 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
         struct rb_tree_node *left = node->left;
         struct rb_tree_node *right = node->right;
 
-        if (node->left == NULL && node->right == NULL && node->parent == NULL) {
+        if (node->left == NULL && node->right == NULL && RB_TREE_NODE_GET_PARENT(node) == NULL) {
             test_rbtree_print(node);
             printf("[color=blue, style=filled];\n");
             continue;
@@ -161,7 +175,7 @@ void rbtree_print(struct rb_tree *tree, struct test_rbtree_node *nodes, size_t n
 
         test_rbtree_print(node);
         printf("[color=%s, style=dotted, shape=%s];\n",
-                node->color == COLOR_RED ? "red" : "black",
+                RB_TREE_NODE_GET_COLOR(node) == COLOR_RED ? "red" : "black",
                 node == tree->root ? "doublecircle" : "circle");
 
         test_rbtree_print(node);
