@@ -315,26 +315,7 @@ rb_result_t rb_tree_find_or_insert(struct rb_tree *tree,
                                    struct rb_tree_node *new_candidate,
                                    struct rb_tree_node **value);
 
-/**
- * \brief Find a node. If not found, insert the candidate.
- * Find a node with the given key. If the node is found, return it by
- * reference, without modifying the tree. If the node is not found,
- * insert the provided candidate node.
- * \note This function always will return in *value the node inserted
- *       or the existing node. If you want to check if the candidate
- *       node was inserted, check if `*value == new_candidate`
- *
- * \param tree The tree in question
- * \param key The key to search for
- * \param new_candidate The candidate node to insert
- * \param value The value at the given location
- *
- * \return RB_OK on success, an error code otherwise
- */
-rb_result_t rb_tree_find_or_insert(struct rb_tree *tree,
-                                   void *key,
-                                   struct rb_tree_node *new_candidate,
-                                   struct rb_tree_node **value);
+
 /**
  * \brief Get the rightmost (greatest relative to predicate) node.
  * Return the rightmost (i.e. greatest relative to predicate) node of the Red-Black tree.
